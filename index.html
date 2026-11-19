@@ -138,6 +138,15 @@
           class="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none rounded-lg px-3 py-2 text-sm text-white"
         />
       </div>
+      <div class="space-y-2">
+        <label class="block text-xs font-medium text-slate-300">Modello Gemini</label>
+        <input
+          type="text"
+          id="modelInput"
+          placeholder="gemini-3.8-flash"
+          class="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none rounded-lg px-3 py-2 text-sm text-white"
+        />
+      </div>
       <div class="flex items-center justify-between pt-2">
         <button id="removeKeyBtn" class="text-xs text-rose-400 hover:text-rose-300">
           Rimuovi chiave (usa Demo)
@@ -161,6 +170,7 @@ Quando usi informazioni provenienti dalla ricerca web, fornisci dati chiari, agg
 
     let conversationHistory = [];
     let apiKey = localStorage.getItem("gemini_api_key") || "";
+    let geminiModel = localStorage.getItem("gemini_model") || "gemini-3.8-flash";
 
     const messagesList = document.getElementById("messagesList");
     const welcomeScreen = document.getElementById("welcomeScreen");
@@ -181,10 +191,11 @@ Quando usi informazioni provenienti dalla ricerca web, fornisci dati chiari, agg
     const saveKeyBtn = document.getElementById("saveKeyBtn");
     const removeKeyBtn = document.getElementById("removeKeyBtn");
     const apiKeyInput = document.getElementById("apiKeyInput");
+    const modelInput = document.getElementById("modelInput");
 
     function updateStatus() {
       if (apiKey) {
-        statusText.textContent = "Connesso a Gemini API";
+        statusText.textContent = `Connesso a Gemini API (${geminiModel})`;
         statusText.className = "text-xs text-emerald-400";
       } else {
         statusText.textContent = "Modalità Demo (inserisci API Key per dati live)";
@@ -224,6 +235,7 @@ Quando usi informazioni provenienti dalla ricerca web, fornisci dati chiari, agg
     // Modal handlers
     openModalBtn.addEventListener("click", () => {
       apiKeyInput.value = apiKey;
+      modelInput.value = geminiModel;
       apiModal.classList.remove("hidden");
       apiModal.classList.add("flex");
     });
@@ -238,11 +250,13 @@ Quando usi informazioni provenienti dalla ricerca web, fornisci dati chiari, agg
 
     saveKeyBtn.addEventListener("click", () => {
       apiKey = apiKeyInput.value.trim();
+      geminiModel = modelInput.value.trim() || "gemini-3.8-flash";
       if (apiKey) {
         localStorage.setItem("gemini_api_key", apiKey);
       } else {
         localStorage.removeItem("gemini_api_key");
       }
+      localStorage.setItem("gemini_model", geminiModel);
       updateStatus();
       closeModal();
     });
@@ -334,6 +348,24 @@ Quando usi informazioni provenienti dalla ricerca web, fornisci dati chiari, agg
       return `Ho ricevuto la tua domanda: *"${question}"*.\n\nAl momento l'app è in **Modalità Demo** (quindi sto simulando una risposta senza interrogare il web). Clicca sul pulsante verde **API Key** in alto a destra, incolla una chiave gratuita di Google AI Studio e attiva **Web Live** per ricevere risposte reali e aggiornate su qualsiasi tema!`;
     }
 
+    async function fetchWithRetry(url, options, retries = 3, delayMs = 1500) {
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        const response = await fetch(url, options);
+        const data = await response.json();
+
+        const isHighDemand =
+          response.status === 503 ||
+          response.status === 429 ||
+          (data?.error?.message || "").toLowerCase().includes("high demand");
+
+        if (response.ok || !isHighDemand || attempt === retries) {
+          return { response, data };
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, delayMs * attempt));
+      }
+    }
+
     async function sendMessage(text) {
       appendMessage("user", text);
       conversationHistory.push({
@@ -357,19 +389,21 @@ Quando usi informazioni provenienti dalla ricerca web, fornisci dati chiari, agg
           return;
         }
 
+        const recentHistory = conversationHistory.slice(-6);
+
         const payload = {
           system_instruction: {
             parts: [{ text: SYSTEM_PROMPT }]
           },
-          contents: conversationHistory
+          contents: recentHistory
         };
 
         if (webSearchToggle.checked) {
           payload.tools = [{ google_search: {} }];
         }
 
-        const response = await fetch(
-         `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+        const { response, data } = await fetchWithRetry(
+          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent?key=${encodeURIComponent(apiKey)}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -377,7 +411,6 @@ Quando usi informazioni provenienti dalla ricerca web, fornisci dati chiari, agg
           }
         );
 
-        const data = await response.json();
         removeTyping();
 
         if (!response.ok) {
