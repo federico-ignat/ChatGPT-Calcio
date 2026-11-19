@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calcio & AI Assistant</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    body {
+      background-color: #0b0f19;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .chat-scroll::-webkit-scrollbar {
+      width: 6px;
+    }
+    .chat-scroll::-webkit-scrollbar-thumb {
+      background-color: #334155;
+      border-radius: 9999px;
+    }
+    .prose-custom p { margin-bottom: 0.65rem; }
+    .prose-custom p:last-child { margin-bottom: 0; }
+    .prose-custom ul { list-style-type: disc; padding-left: 1.25rem; margin-bottom: 0.65rem; }
+    .prose-custom ol { list-style-type: decimal; padding-left: 1.25rem; margin-bottom: 0.65rem; }
+    .prose-custom strong { color: #f8fafc; font-weight: 600; }
+    .prose-custom code {
+      background: #1e293b;
+      padding: 0.15rem 0.35rem;
+      border-radius: 0.25rem;
+      font-size: 0.85em;
+    }
+  </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur px-4 py-3 flex items-center justify-between gap-2 shrink-0">
+    <div class="flex items-center gap-2.5">
+      <div class="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold text-lg">
+        ⚽
+      </div>
+      <div>
+        <h1 class="font-semibold text-slate-100 text-sm sm:text-base leading-tight">AI Chat Live</h1>
+        <p id="statusText" class="text-xs text-slate-400">Modalità Demo (inserisci API Key per dati live)</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2 sm:gap-3">
+      <!-- Toggle Web Live -->
+      <label class="flex items-center gap-2 cursor-pointer bg-slate-800/80 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs select-none" title="Cerca notizie e formazioni aggiornate sul web">
+        <input type="checkbox" id="webSearchToggle" checked class="accent-emerald-500 w-3.5 h-3.5 cursor-pointer" />
+        <span class="text-slate-200 font-medium">Web Live</span>
+        <span id="webDot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+      </label>
+
+      <!-- Clear Chat -->
+      <button id="clearBtn" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2.5 py-1.5 rounded-lg transition">
+        Nuova chat
+      </button>
+
+      <!-- API Key Button -->
+      <button id="openModalBtn" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-3 py-1.5 rounded-lg transition shadow-sm">
+        API Key
+      </button>
+    </div>
+  </header>
+
+  <!-- Chat Container -->
+  <main id="chatContainer" class="flex-1 overflow-y-auto chat-scroll px-4 py-6">
+    <div id="messagesList" class="max-w-3xl mx-auto space-y-5">
+      <!-- Welcome Card -->
+      <div id="welcomeScreen" class="text-center py-8 space-y-6">
+        <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-3xl">
+          🤖
+        </div>
+        <div class="space-y-2">
+          <h2 class="text-xl sm:text-2xl font-bold text-white">Chiedimi qualsiasi cosa</h2>
+          <p class="text-sm text-slate-400 max-w-md mx-auto">
+            Con <strong>Web Live</strong> attivo cerco in tempo reale formazioni, risultati, notizie e rispondo a qualsiasi tua domanda mantenendo il filo della conversazione.
+          </p>
+        </div>
+
+        <!-- Quick Prompts -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-xl mx-auto text-left">
+          <button class="quick-prompt p-3 rounded-xl bg-slate-900 hover:bg-slate-800/90 border border-slate-800 hover:border-slate-700 transition text-xs sm:text-sm text-slate-300">
+            ⚽ Qual è la probabile formazione dell'Inter?
+          </button>
+          <button class="quick-prompt p-3 rounded-xl bg-slate-900 hover:bg-slate-800/90 border border-slate-800 hover:border-slate-700 transition text-xs sm:text-sm text-slate-300">
+            🏆 Com'è la classifica attuale di Serie A?
+          </button>
+          <button class="quick-prompt p-3 rounded-xl bg-slate-900 hover:bg-slate-800/90 border border-slate-800 hover:border-slate-700 transition text-xs sm:text-sm text-slate-300">
+            📊 Analizza il modulo 3-5-2 e i suoi punti di forza
+          </button>
+          <button class="quick-prompt p-3 rounded-xl bg-slate-900 hover:bg-slate-800/90 border border-slate-800 hover:border-slate-700 transition text-xs sm:text-sm text-slate-300">
+            💡 Suggeriscimi 3 idee per migliorare questo progetto
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Input Area -->
+  <footer class="border-t border-slate-800 bg-slate-900/90 backdrop-blur p-3 sm:p-4 shrink-0">
+    <form id="chatForm" class="max-w-3xl mx-auto flex items-end gap-2">
+      <textarea
+        id="userInput"
+        rows="1"
+        placeholder="Scrivi una domanda (es. Qual è la formazione dell'Inter?)..."
+        class="flex-1 bg-slate-800 text-slate-100 placeholder-slate-400 border border-slate-700 focus:border-emerald-500 focus:outline-none rounded-xl px-4 py-3 text-sm resize-none max-h-36"
+      ></textarea>
+      <button
+        type="submit"
+        id="sendBtn"
+        class="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-4 py-3 rounded-xl text-sm transition shrink-0"
+      >
+        Invia
+      </button>
+    </form>
+  </footer>
+
+  <!-- API Key Modal -->
+  <div id="apiModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-semibold text-white">Configura Gemini API Key</h3>
+        <button id="closeModalBtn" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
+      </div>
+      <p class="text-xs text-slate-400 leading-relaxed">
+        La chiave viene salvata solo nel tuo browser (<code>localStorage</code>) e mai pubblicata su GitHub. Ottieni una chiave gratuita su <strong>Google AI Studio</strong>.
+      </p>
+      <div class="space-y-2">
+        <label class="block text-xs font-medium text-slate-300">API Key</label>
+        <input
+          type="password"
+          id="apiKeyInput"
+          placeholder="AIzaSy..."
+          class="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none rounded-lg px-3 py-2 text-sm text-white"
+        />
+      </div>
+      <div class="flex items-center justify-between pt-2">
+        <button id="removeKeyBtn" class="text-xs text-rose-400 hover:text-rose-300">
+          Rimuovi chiave (usa Demo)
+        </button>
+        <div class="flex gap-2">
+          <button id="cancelModalBtn" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded-lg">
+            Annulla
+          </button>
+          <button id="saveKeyBtn" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg">
+            Salva
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SYSTEM_PROMPT = `Sei un assistente AI amichevole, preciso e competente che risponde in italiano. 
+Sai rispondere a qualsiasi domanda su qualunque argomento, con particolare attenzione ad aggiornamenti sportivi, calcio, tattica, formazioni e statistiche. 
+Quando usi informazioni provenienti dalla ricerca web, fornisci dati chiari, aggiornati e ben strutturati.`;
+
+    let conversationHistory = [];
+    let apiKey = localStorage.getItem("gemini_api_key") || "";
+
+    const messagesList = document.getElementById("messagesList");
+    const welcomeScreen = document.getElementById("welcomeScreen");
+    const chatContainer = document.getElementById("chatContainer");
+    const chatForm = document.getElementById("chatForm");
+    const userInput = document.getElementById("userInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const statusText = document.getElementById("statusText");
+    const webSearchToggle = document.getElementById("webSearchToggle");
+    const webDot = document.getElementById("webDot");
+    const clearBtn = document.getElementById("clearBtn");
+
+    // Modal elements
+    const apiModal = document.getElementById("apiModal");
+    const openModalBtn = document.getElementById("openModalBtn");
+    const closeModalBtn = document.getElementById("closeModalBtn");
+    const cancelModalBtn = document.getElementById("cancelModalBtn");
+    const saveKeyBtn = document.getElementById("saveKeyBtn");
+    const removeKeyBtn = document.getElementById("removeKeyBtn");
+    const apiKeyInput = document.getElementById("apiKeyInput");
+
+    function updateStatus() {
+      if (apiKey) {
+        statusText.textContent = "Connesso a Gemini API";
+        statusText.className = "text-xs text-emerald-400";
+      } else {
+        statusText.textContent = "Modalità Demo (inserisci API Key per dati live)";
+        statusText.className = "text-xs text-slate-400";
+      }
+    }
+
+    updateStatus();
+
+    webSearchToggle.addEventListener("change", () => {
+      webDot.className = webSearchToggle.checked
+        ? "w-2 h-2 rounded-full bg-emerald-400"
+        : "w-2 h-2 rounded-full bg-slate-500";
+    });
+
+    // Auto-resize textarea
+    userInput.addEventListener("input", () => {
+      userInput.style.height = "auto";
+      userInput.style.height = Math.min(userInput.scrollHeight, 144) + "px";
+    });
+
+    userInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        chatForm.dispatchEvent(new Event("submit"));
+      }
+    });
+
+    // Quick prompts
+    document.querySelectorAll(".quick-prompt").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        userInput.value = btn.textContent.replace(/^[^\wÀ-ÿ]+/, "").trim();
+        chatForm.dispatchEvent(new Event("submit"));
+      });
+    });
+
+    // Modal handlers
+    openModalBtn.addEventListener("click", () => {
+      apiKeyInput.value = apiKey;
+      apiModal.classList.remove("hidden");
+      apiModal.classList.add("flex");
+    });
+
+    function closeModal() {
+      apiModal.classList.add("hidden");
+      apiModal.classList.remove("flex");
+    }
+
+    closeModalBtn.addEventListener("click", closeModal);
+    cancelModalBtn.addEventListener("click", closeModal);
+
+    saveKeyBtn.addEventListener("click", () => {
+      apiKey = apiKeyInput.value.trim();
+      if (apiKey) {
+        localStorage.setItem("gemini_api_key", apiKey);
+      } else {
+        localStorage.removeItem("gemini_api_key");
+      }
+      updateStatus();
+      closeModal();
+    });
+
+    removeKeyBtn.addEventListener("click", () => {
+      apiKey = "";
+      apiKeyInput.value = "";
+      localStorage.removeItem("gemini_api_key");
+      updateStatus();
+      closeModal();
+    });
+
+    clearBtn.addEventListener("click", () => {
+      conversationHistory = [];
+      messagesList.innerHTML = "";
+      if (welcomeScreen) {
+        messagesList.appendChild(welcomeScreen);
+        welcomeScreen.classList.remove("hidden");
+      }
+    });
+
+    function appendMessage(role, text, sources = []) {
+      if (welcomeScreen) {
+        welcomeScreen.classList.add("hidden");
+      }
+
+      const wrapper = document.createElement("div");
+      wrapper.className = role === "user" ? "flex justify-end" : "flex justify-start";
+
+      const bubble = document.createElement("div");
+      if (role === "user") {
+        bubble.className = "bg-emerald-600 text-white rounded-2xl rounded-br-sm px-4 py-3 max-w-[85%] text-sm whitespace-pre-wrap shadow";
+        bubble.textContent = text;
+      } else {
+        bubble.className = "bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl rounded-bl-sm px-4 py-3 max-w-[90%] text-sm prose-custom shadow";
+        bubble.innerHTML = marked.parse(text);
+
+        if (sources.length > 0) {
+          const sourcesDiv = document.createElement("div");
+          sourcesDiv.className = "mt-3 pt-2.5 border-t border-slate-800 flex flex-wrap gap-1.5 items-center";
+          const label = document.createElement("span");
+          label.className = "text-[11px] text-slate-400 mr-1";
+          label.textContent = "Fonti:";
+          sourcesDiv.appendChild(label);
+
+          sources.forEach((src) => {
+            const a = document.createElement("a");
+            a.href = src.uri;
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+            a.className = "text-[11px] bg-slate-800 hover:bg-slate-700 text-emerald-400 px-2 py-0.5 rounded-md truncate max-w-[180px]";
+            a.textContent = src.title || new URL(src.uri).hostname;
+            sourcesDiv.appendChild(a);
+          });
+          bubble.appendChild(sourcesDiv);
+        }
+      }
+
+      wrapper.appendChild(bubble);
+      messagesList.appendChild(wrapper);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+      return wrapper;
+    }
+
+    function appendTyping() {
+      const wrapper = document.createElement("div");
+      wrapper.id = "typingIndicator";
+      wrapper.className = "flex justify-start";
+      wrapper.innerHTML = `
+        <div class="bg-slate-900 border border-slate-800 text-slate-400 rounded-2xl rounded-bl-sm px-4 py-3 text-xs flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>Sto elaborando la risposta...</span>
+        </div>
+      `;
+      messagesList.appendChild(wrapper);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    function removeTyping() {
+      const el = document.getElementById("typingIndicator");
+      if (el) el.remove();
+    }
+
+    function getDemoResponse(question) {
+      const q = question.toLowerCase();
+      if (q.includes("inter") && q.includes("formazione")) {
+        return `Ecco un esempio di **probabile formazione tipo dell'Inter (3-5-2)** in modalità Demo:\n\n* **Portiere:** Sommer\n* **Difesa:** Pavard, Acerbi, Bastoni\n* **Centrocampo:** Dumfries, Barella, Calhanoglu, Mkhitaryan, Dimarco\n* **Attacco:** Thuram, Lautaro Martinez\n\n*Nota: stai usando la **Modalità Demo**. Inserisci la tua Gemini API Key in alto a destra con **Web Live** attivo per ottenere la formazione aggiornata all'ultima partita reale!*`;
+      }
+      return `Ho ricevuto la tua domanda: *"${question}"*.\n\nAl momento l'app è in **Modalità Demo** (quindi sto simulando una risposta senza interrogare il web). Clicca sul pulsante verde **API Key** in alto a destra, incolla una chiave gratuita di Google AI Studio e attiva **Web Live** per ricevere risposte reali e aggiornate su qualsiasi tema!`;
+    }
+
+    async function sendMessage(text) {
+      appendMessage("user", text);
+      conversationHistory.push({
+        role: "user",
+        parts: [{ text }]
+      });
+
+      sendBtn.disabled = true;
+      appendTyping();
+
+      try {
+        if (!apiKey) {
+          await new Promise((r) => setTimeout(r, 600));
+          removeTyping();
+          const demoReply = getDemoResponse(text);
+          appendMessage("model", demoReply);
+          conversationHistory.push({
+            role: "model",
+            parts: [{ text: demoReply }]
+          });
+          return;
+        }
+
+        const payload = {
+          system_instruction: {
+            parts: [{ text: SYSTEM_PROMPT }]
+          },
+          contents: conversationHistory
+        };
+
+        if (webSearchToggle.checked) {
+          payload.tools = [{ google_search: {} }];
+        }
+
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          }
+        );
+
+        const data = await response.json();
+        removeTyping();
+
+        if (!response.ok) {
+          const errMsg = data?.error?.message || "Errore durante la chiamata all'API Gemini.";
+          appendMessage("model", `**Errore API:** ${errMsg}`);
+          conversationHistory.pop();
+          return;
+        }
+
+        const candidate = data.candidates?.[0];
+        const replyText =
+          candidate?.content?.parts?.map((p) => p.text || "").join("") ||
+          "Non ho ricevuto testo di risposta dal modello.";
+
+        // Extract grounding sources if available
+        const chunks = candidate?.groundingMetadata?.groundingChunks || [];
+        const sources = [];
+        const seenUris = new Set();
+        chunks.forEach((chunk) => {
+          if (chunk.web?.uri && !seenUris.has(chunk.web.uri)) {
+            seenUris.add(chunk.web.uri);
+            sources.push({ uri: chunk.web.uri, title: chunk.web.title });
+          }
+        });
+
+        appendMessage("model", replyText, sources);
+        conversationHistory.push({
+          role: "model",
+          parts: [{ text: replyText }]
+        });
+      } catch (err) {
+        removeTyping();
+        appendMessage("model", `**Errore di rete:** ${err.message}`);
+        conversationHistory.pop();
+      } finally {
+        sendBtn.disabled = false;
+        userInput.focus();
+      }
+    }
+
+    chatForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const text = userInput.value.trim();
+      if (!text) return;
+      userInput.value = "";
+      userInput.style.height = "auto";
+      sendMessage(text);
+    });
+  </script>
+</body>
+</html>
